@@ -27,6 +27,13 @@
 *.lib
 
 # Executables
+rtp-pcap-replay
 *.exe
 *.out
 *.app
+
+# Emacs backups
+*~
+
+# Work in progress
+wip/
