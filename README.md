@@ -9,15 +9,9 @@ The program will analyse the RTP packets to stream to guess the RTP time increme
 It is able to loop over the capture file and stream it forever.
 It will fix the time and sequence fields of the RTP header while streaming.
 
-Once started the program outputs an SDP but it can't guess what is the RTP payload.
-It assumes that the capture contains h264 video.
-The SDP needs to be fixed for other RTP payloads which is quite easy.
-
 A few video samples are provided with the source code for testing.
 
-The initial version of this program uses live555 for streaming, and libpcap for reading tcpdump capture files.
-
-Another version without the live555 dependency has been coded too.
+This program uses live555 for streaming, and libpcap for reading tcpdump capture files.
 
 This program has been used under cygwin and linux.
 
@@ -63,4 +57,26 @@ Assuming live555 has been compiled and installed in /usr/local and winpcap has b
 ~~~~
 g++ -g3 rtp-pcap-replay.cpp -o rtp-pcap-replay -I/usr/local/include/groupsock -I /usr/local/include/BasicUsageEnvironment -I /usr/local/include/UsageEnvironment -L/usr/local/lib -I ./winpcap/include -L ./winpcap/Lib -lBasicUsageEnvironment -lUsageEnvironment -lgroupsock -lwpcap -lpacket
 ~~~~
+
+## Demo and usage
+
+There to videos and an SDP provided for it :
+
+~~~~
+localadmin@buster:rtp-pcap-replay$ cat demo/camera.sdp
+v=0
+m=video 9010 RTP/AVP 96
+c=IN IP4 236.22.200.20/255
+a=rtpmap:96 MP4V-ES/90000
+a=fmtp:96 profile-level-id=3; config=0000012000c488ba9850584121463f;
+
+localadmin@buster:rtp-pcap-replay$ ./rtp-pcap-replay -c ./demo/camera.pcap -a 236.22.200.20 -p 9010 -l 0
+~~~~
+
+Now, with VLC open the demo/camera.sdp :
+
+![alt text](demo/camera.png)
+
+
+
 
