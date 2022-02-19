@@ -79,9 +79,9 @@ const char*    dstAddressString = "232.0.1.1";
 uint16_t       rtpPortNum = 1500;
 uint8_t        verbose = 0;
 uint8_t        loop = 0;
-// c'est le bon offset pour les captures tcpdump de linux
+// linux cooked frame offset
 uint32_t       offset = 3*16-4;
-// offset pour les captures faites sous windows
+// ethernet frame
 //uint32_t       offset = 3*16-6;
 
 // global constants
@@ -132,6 +132,7 @@ void usage( const char *progname, const char *fmt, ...)
   exit( (fmt != NULL) ? 1 : 0);
 }
 
+
 /* --------------------------------------------------------------------------
  *   Parse command line switches
  * --------------------------------------------------------------------------*/
@@ -181,11 +182,44 @@ void live( int argc, char **argv)
 }
 
 /* --------------------------------------------------------------------------
+ *   Open capture and compile filter
+ * --------------------------------------------------------------------------*/
+void open_capture(pcap_t **pfp)
+{
+  int reopen = (*pfp != NULL);
+  
+  // open capture
+  if ((*pfp = pcap_open_offline(pcapfile, errbuf)) == NULL) {
+    fprintf(stderr,"\nUnable to open the file '%s'.\n", pcapfile);
+    exit(1);
+  }
+  if ( verbose ) {
+    *env << "Capture file reopened.\n";
+  }
+
+  /* compile pcap filter if given */
+  if ( filter != NULL && strlen(filter) > 0 ) {
+    if (reopen) {
+      pcap_freecode( &pcapfilter);
+    }
+    if ( pcap_compile(*pfp, &pcapfilter, filter, 0, PCAP_NETMASK_UNKNOWN) == -1 ) {
+      fprintf(stderr,"\nUnable to compile filter '%s'.\n", filter);
+      exit(1);
+    }
+    if ( pcap_setfilter(*pfp, &pcapfilter) == -1) {
+      fprintf(stderr,"\nUnable to install filter '%s'.\n", filter);
+      exit(1);
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
  *   Get next packet - reopen file if needed
  * --------------------------------------------------------------------------*/
 void next_packet( pcap_t **pfp, struct pcap_pkthdr **phdr, const u_char ** pdata)
 {
   int res;
+
   res = pcap_next_ex(*pfp, phdr, pdata);
   if (res <= 0) {
     // compute remaining loop number
@@ -201,28 +235,14 @@ void next_packet( pcap_t **pfp, struct pcap_pkthdr **phdr, const u_char ** pdata
       pcap_close(*pfp);
 
       // open capture
-      if ((*pfp = pcap_open_offline(pcapfile, errbuf)) == NULL) {
-	fprintf(stderr,"\nUnable to open the file '%s'.\n", pcapfile);
-	exit(1);
-      }
-      if ( verbose ) {
-	*env << "Capture file reopened.\n";
-      }
+      open_capture(pfp);
 
-      /* compile pcap filter if given */
-      if ( filter != NULL && strlen(filter) > 0 ) {
-	if ( !pcap_compile(*pfp, &pcapfilter, filter, 0, 0 /* PCAP_NETMASK_UNKNOWN */) ) {
-	  fprintf(stderr,"\nUnable to compile filter '%s'.\n", filter);
-	  exit(1);
-	}
-	if ( !pcap_setfilter(*pfp, &pcapfilter)) {
-	  fprintf(stderr,"\nUnable to install filter '%s'.\n", filter);
-	  exit(1);
-	}
-      }
+      next_packet(pfp, phdr, pdata);
+      return;
     }
     else {
       // it was an error
+    error:
       printf("Error reading the packets: %s\n", pcap_geterr(*pfp));
       exit(1);
     }
@@ -346,29 +366,14 @@ void step( void *clientData )
  * --------------------------------------------------------------------------*/
 int main(int argc, char **argv)
 {
-  pcap_t *fp;
+  pcap_t *fp = NULL;
   struct todo task;
 
   /* init */
   live(argc, argv);
   
   /* Open the capture file */
-  if ((fp = pcap_open_offline(pcapfile, errbuf)) == NULL) {
-    fprintf(stderr,"\nUnable to open the file '%s'.\n", pcapfile);
-    return -1;
-  }
-
-  /* compile pcap filter if given */
-  if ( filter != NULL && strlen(filter) > 0 ) {
-    if ( !pcap_compile(fp, &pcapfilter, filter, 0, 0 /* PCAP_NETMASK_UNKNOWN */) ) {
-      fprintf(stderr,"\nUnable to compile filter '%s'.\n", filter);
-      return -1;
-    }
-    if ( !pcap_setfilter(fp, &pcapfilter)) {
-      fprintf(stderr,"\nUnable to install filter '%s'.\n", filter);
-      return -1;
-    }
-  }
+  open_capture(&fp);
   
   /* fill task data */
   task.fp  = fp;
