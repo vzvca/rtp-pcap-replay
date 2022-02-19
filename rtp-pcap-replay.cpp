@@ -80,9 +80,10 @@ uint16_t       rtpPortNum = 1500;
 uint8_t        verbose = 0;
 uint8_t        loop = 0;
 // linux cooked frame offset
-uint32_t       offset = 3*16-4;
+//uint32_t       offset = 3*16-4;
 // ethernet frame
 //uint32_t       offset = 3*16-6;
+uint32_t offset = 0;
 
 // global constants
 const uint8_t  ttl = 4;
@@ -127,7 +128,7 @@ void usage( const char *progname, const char *fmt, ...)
   std::cout << "\t -c file      : pcap file (default "<< pcapfile << ")" << std::endl;
   std::cout << "\t -f filter    : pcap filter (default none)" << std::endl;
   std::cout << "\t -l num       : how many times to play the file, 0 means infinite looping (default " << (loop+1) << ")" << std::endl;
-  std::cout << "\t -o offset    : offset of payload in pcap packet (default " << offset << " is good for linux tcpdump captures)" << std::endl;
+  std::cout << "\t -o offset    : offset of payload in pcap packet (44 is good for linux cooked tcpdump captures)" << std::endl;
   
   exit( (fmt != NULL) ? 1 : 0);
 }
@@ -178,6 +179,24 @@ void live( int argc, char **argv)
 
   if ( ::IsMulticastAddress(::our_inet_addr(dstAddressString)) ) {
     rtpGroupsock->multicastSendOnly();
+  }
+}
+
+/* --------------------------------------------------------------------------
+ *   Compute offset from DLT
+ * --------------------------------------------------------------------------*/
+int get_offset(pcap_t *pcap)
+{
+  if (offset > 0) {
+    return offset;
+  }
+  /* compute offset */
+  switch(pcap_datalink(pcap)) {
+  case DLT_EN10MB:
+    return 3*16-6;
+  case DLT_LINUX_SLL:
+  default:
+    return 3*16-4;
   }
 }
 
@@ -274,7 +293,7 @@ void step( void *clientData )
   // if looping over file content
   // we need to recompute the RTP timestamp and sequence number
   if ( loop != 0 ) {
-    RTPHeader *rtph = (RTPHeader*) (pkt_data + offset);
+    RTPHeader *rtph = (RTPHeader*) (pkt_data + get_offset(task->fp));
 
     // compute RTP timestamp
     // RTP header used big endian integers
@@ -318,10 +337,9 @@ void step( void *clientData )
 
   // Send the packet
   // Note we have to move forward !!
-  // kill 00 00 01 b2
-  int len = header->caplen-offset;
+  int len = header->caplen-get_offset(task->fp);
   gettimeofday(&before_send, NULL);
-  rtpGroupsock->output(*env, (unsigned char*) (pkt_data + offset), len);
+  rtpGroupsock->output(*env, (unsigned char*) (pkt_data + get_offset(task->fp)), len);
 
   // schedule next call
   // get next packet from capture
